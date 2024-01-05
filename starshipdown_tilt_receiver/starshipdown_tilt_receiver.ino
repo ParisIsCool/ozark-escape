@@ -41,6 +41,7 @@ void setup() {
   WiFi.mode(WIFI_AP);
   // configure device AP mode
   configDeviceAP();
+  WiFi.setSleep(WIFI_PS_NONE);
   // This is the mac address of the Slave in AP Mode
   Serial.print("AP MAC: "); Serial.println(WiFi.softAPmacAddress());
   // Init ESPNow with a fallback logic

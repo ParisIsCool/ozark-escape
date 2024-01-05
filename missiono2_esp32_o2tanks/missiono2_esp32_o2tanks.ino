@@ -1,4 +1,9 @@
+//#define FASTLED_ESP32_I2S 1
+//#define FASTLED_RMT_MAX_CHANNELS 1
+//#define FASTLED_RGBW
+#define FASTLED_ALLOW_INTERRUPTS 0
 #include <FastLED.h>
+#include <ESPAsyncWebSrv.h>
 
 #define NUM_LEDS 30
 #define DATA_PIN 12
@@ -9,26 +14,11 @@
 
 CRGB leds[NUM_LEDS];
 int brightness = 255;
+#define RGB_BRIGHTNESS 150 // Change white brightness (max 255)
 
-const int cylinder1 = 15;
-const int cylinder2 = 4;
-const int cylinder3 = 5;
-const int cylinder4 = 18;
-const int cylinder5 = 19;
-
-int cylinder1State = 0;
-int cylinder2State = 0;
-int cylinder3State = 0;
-int cylinder4State = 0;
-int cylinder5State = 0;
-
-int prestate1 = 0;
-int prestate2 = 0;
-int prestate3 = 0;
-int prestate4 = 0;
-int prestate5 = 0;
-int currentStep = 0;
-int lastStep = 0;
+const int numOfCylinders = 5;
+const int cylinders[numOfCylinders] = {19,18,5,4,15};
+int cylindersStates[numOfCylinders];
 
 // Replace with your network credentials
 const char* ssid = "Ozark Escape";
@@ -48,270 +38,174 @@ IPAddress primaryDNS(8, 8, 8, 8);    //optional
 IPAddress secondaryDNS(8, 8, 4, 4);  //optional
 
 // Set web server port number to 80
-WiFiServer server(80);
+AsyncWebServer server(80);
 
+TaskHandle_t Task1;
+
+void Task1code( void * parameter) {
+  while(true) {
+    FastLED.show();
+    delay(20);
+  }
+}
+
+bool soundPlay = false;
+bool triggered = false;
+bool checked_trigger = false;
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   while (!Serial) {
   }
   Serial.println("Starting up...");
   FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
-  FastLED.setBrightness(500);
-  pinMode(cylinder1, INPUT_PULLUP);
-  pinMode(cylinder2, INPUT_PULLUP);
-  pinMode(cylinder3, INPUT_PULLUP);
-  pinMode(cylinder4, INPUT_PULLUP);
-  pinMode(cylinder5, INPUT_PULLUP);
+  FastLED.setBrightness(255);
+  for (int i = 0; i < numOfCylinders; i++) {
+    pinMode(cylinders[i], INPUT_PULLUP);
+    cylindersStates[i] = (digitalRead(cylinders[i]) * -1) + 1;
+  }
   for(int i = 0; i < NUM_LEDS; i++ ) {
     leds[i] = CRGB::Black;
     FastLED.show();
   }
   pinMode(LED_BUILTIN, OUTPUT);
-}
 
-bool soundPlay = false;
-void loop() {
-  runWifiLoop();
-  cylinder1State = digitalRead(cylinder1);
-  cylinder2State = digitalRead(cylinder2);
-  cylinder3State = digitalRead(cylinder3);
-  cylinder4State = digitalRead(cylinder4);
-  cylinder5State = digitalRead(cylinder5);
-   
-    if(cylinder1State == LOW && prestate1 == 0)
-    {
-      currentStep++;
-      Serial.println("Cylinder Added");
-      Serial.println(currentStep);
-      prestate1 = 1;
-      leds[4] = CRGB::Red;
-    }
+  xTaskCreatePinnedToCore(
+                    Task1code,   /* Task function. */
+                    "Task1code",     /* name of task. */
+                    10000,       /* Stack size of task */
+                    NULL,        /* parameter of the task */
+                    1,           /* priority of the task */
+                    NULL,      /* Task handle to keep track of created task */
+                    1);          /* pin task to core 0 */   
 
-
-    else if(cylinder1State == HIGH && prestate1 == 1)
-    {
-      currentStep--;
-      Serial.println("Cylinder Removed");
-      Serial.println(currentStep);
-      prestate1 = 0;
-      leds[4] = CRGB::Black;
-    }
-
-
-    if(cylinder2State == LOW && prestate2 == 0)
-    {
-      currentStep++;
-      Serial.println("Cylinder Added");
-      Serial.println(currentStep);
-      prestate2 = 1;
-      leds[3] = CRGB::Red;
-    }
-
-
-    else if(cylinder2State == HIGH && prestate2 == 1)
-    {
-      currentStep--;
-      Serial.println("Cylinder Removed");
-      Serial.println(currentStep);
-      prestate2 = 0;
-      leds[3] = CRGB::Black;
-    }
-
-
-    if(cylinder3State == LOW && prestate3 == 0)
-    {
-      currentStep++;
-      Serial.println("Cylinder Added");
-      Serial.println(currentStep);
-      prestate3 = 1;
-      leds[2] = CRGB::Red;
-    }
-
-
-    else if(cylinder3State == HIGH && prestate3 == 1)
-    {
-      currentStep--;
-      Serial.println("Cylinder Removed");
-      Serial.println(currentStep);
-      prestate3 = 0;
-      leds[2] = CRGB::Black;
-    }
-
-
-    if(cylinder4State == LOW && prestate4 == 0)
-    {
-      currentStep++;
-      Serial.println("Cylinder Added");
-      Serial.println(currentStep);
-      prestate4 = 1;
-      leds[1] = CRGB::Red;
-    }
-
-
-    else if(cylinder4State == HIGH && prestate4 == 1)
-    {
-      currentStep--;
-      Serial.println("Cylinder Removed");
-      Serial.println(currentStep);
-      prestate4 = 0;
-      leds[1] = CRGB::Black;
-    }
-
-
-    if(cylinder5State == LOW && prestate5 == 0)
-    {
-      currentStep++;
-      Serial.println("Cylinder Added");
-      Serial.println(currentStep);
-      prestate5 = 1;
-      leds[0] = CRGB::Red;
-    }
-
-
-    else if(cylinder5State == HIGH && prestate5 == 1)
-    {
-      currentStep--;
-      Serial.println("Cylinder Removed");
-      Serial.println(currentStep);
-      prestate5 = 0;
-      leds[0] = CRGB::Black;
-    }
-
-
-    if(currentStep == 0)
-    {
-      for(int i = 5; i < 30; i++ )
-      leds[i] = CRGB::Black;
-    }
-    if(currentStep == 1)
-    {
-      for(int i = 5; i < 10; i++ )
-      leds[i] = CRGB::Red;
-      for(int i = 10; i < 30; i++ )
-      leds[i] = CRGB::Black;
-    }
-    if(currentStep == 2)
-    {
-      for(int i = 5; i < 15; i++ )
-      leds[i] = CRGB::Red;
-      for(int i = 15; i < 30; i++ )
-      leds[i] = CRGB::Black;
-    }
-    if(currentStep == 3)
-    {
-      for(int i = 5; i < 20; i++ )
-      leds[i] = CRGB::Red;
-      for(int i = 20; i < 30; i++ )
-      leds[i] = CRGB::Black;
-    }
-    if(currentStep == 4)
-    {
-      for(int i = 5; i < 25; i++ )
-      leds[i] = CRGB::Red;
-      for(int i = 25; i < 30; i++ )
-      leds[i] = CRGB::Black;
-    }
-    if(currentStep == 5)
-    {
-      for(int i = 5; i < 30; i++ )
-      leds[i] = CRGB::Red;
-    }
-
-
-    if((cylinder1State==LOW)&&(cylinder2State==LOW)&&(cylinder3State==LOW)&&(cylinder4State==LOW)&&(cylinder5State==LOW))
-  {
-      for(int i = 5; i < NUM_LEDS; i++ )
-      leds[i] = CRGB::Green;
-  }
-  FastLED.show();
-  if (currentStep > lastStep && currentStep != 5) {
-    soundPlay = true;    
-  }
-  lastStep = currentStep;
-}
-
-void CheckPin(WiFiClient& client, bool changed) {
-  String status = (changed) ? "triggered" : "not triggered";
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/plain");
-  client.println("Access-Control-Allow-Origin: *");  // ERM will not be able to connect without this header!
-  client.println();
-  client.print(status);
-}
-
-// Actual request handler
-void processRequest(WiFiClient& client, String requestStr) {
-  // Send back different response based on request string
-  if (requestStr.startsWith("GET /completed")) {
-    CheckPin(client, currentStep == 5);
-  } else if (requestStr.startsWith("GET /sound")) {
-    CheckPin(client, soundPlay);
+  server.on("/sound", HTTP_GET, [](AsyncWebServerRequest *request){
+    AsyncResponseStream *response = request->beginResponseStream("text/html");
+    CheckPin(response, soundPlay);
     if (soundPlay) { soundPlay = false; }
-  } else {  // when ip is called with no request
-    Serial.println("Polled.");
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/html");
-    client.println();
-    client.println("<!DOCTYPE HTML>");
-    client.println("<html>");
-    client.println("<head>");
-    client.println("<style>");
-    client.println("body { background-color: #111111; font-family:Roboto }");
-    client.println("h1 { color: #ffffff; }");
-    client.println("h3 { color: #999999; }");
-    client.println("</style>");
-    client.println("</head>");
-    client.println("<body {background-color: #111111;}>");
-    client.println("<img src='https://static.wixstatic.com/media/6e6fcf_230f10c631da4717a2d87b0e96cd93f9~mv2_d_8001_4178_s_4_2.png/v1/crop/x_2,y_943,w_7999,h_2240/fill/w_489,h_137,al_c,q_85,usm_0.66_1.00_0.01,enc_auto/OE8_Primrary2_White.png' alt='Wix.com'>");
-    client.println("<h1>Arduino to Escape Room Master</h1>");
-    client.println("<h1>By Ryan</h1>");
-    client.println("<h3>I'm working just fine.</h3>");
-    client.println("<h3>Mission O2 Tanks. /completed /sound</h3>");
-    client.println("</body>");
-    client.println("</html>");
+    response->addHeader("Access-Control-Allow-Origin","*");
+    request->send(response);
+  });
+
+  server.on("/completed", HTTP_GET, [](AsyncWebServerRequest *request){
+    AsyncResponseStream *response = request->beginResponseStream("text/html");
+    CheckPin(response, checked_trigger);
+    response->addHeader("Access-Control-Allow-Origin","*");
+    request->send(response);
+  });
+
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    AsyncResponseStream *response = request->beginResponseStream("text/html");
+    GetMainMenu(response);
+    request->send(response);
+  });
+
+  server.onNotFound([](AsyncWebServerRequest *request){
+    AsyncResponseStream *response = request->beginResponseStream("text/html");
+    GetMainMenu(response);
+    request->send(response);
+  });
+}
+
+void SetLightBarLights() {
+  int numActive = 0;
+  for (int i = 0; i < numOfCylinders; i++) {
+    if (!cylindersStates[i]) {
+      numActive++;
+    }
+  }
+  for(int i = 5; i < NUM_LEDS; i++ ) {
+    leds[i] = CRGB::Black;
+    if (i < ((1+numActive)*5)) {
+      if (numActive >= 5) {
+        leds[i] = CRGB::Green;
+      } else {
+        leds[i] = CRGB::Red;
+      }
+    }
   }
 }
 
-// DO NOT TOUCH
-// If having trouble connecting, signal may be weak.
-void listenForWifiClients() {
-  // listen for incoming clients
-  WiFiClient client = server.available();
-  if (client) {
-    // Grab the first HTTP header (GET /status HTTP/1.1)
-    String requestStr;
-    boolean firstLine = true;
-    // an http request ends with a blank line
-    boolean currentLineIsBlank = true;
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        // if you've gotten to the end of the line (received a newline
-        // character) and the line is blank, the http request has ended,
-        // so you can send a reply
-        if (c == '\n' && currentLineIsBlank) {
-          processRequest(client, requestStr);
-          break;
-        }
-        if (c == '\n') {
-          // you're starting a new line
-          currentLineIsBlank = true;
-          firstLine = false;
-        } else if (c != '\r') {
-          // you've gotten a character on the current line
-          currentLineIsBlank = false;
-
-          if (firstLine) {
-            requestStr.concat(c);
+bool triggercheck = false;
+int triggermil = 0;
+void loop() {
+  triggered = true; // next logic will set false if not triggered
+  for (int i = 0; i < numOfCylinders; i++) {
+    int prestate = cylindersStates[i];
+    int state = digitalRead(cylinders[i]);
+    if (state == LOW && prestate == HIGH) {
+      leds[i] = CRGB::Red;
+      Serial.print("Cylinder ");
+      Serial.print(i);
+      Serial.print(" (pin ");
+      Serial.print(cylinders[i]);
+      Serial.println(") has been added.");
+      soundPlay = true;
+    } else if (state == HIGH) {
+      if (prestate == LOW) {
+        leds[i] = CRGB::Black;
+        Serial.print("Cylinder ");
+        Serial.print(i);
+        Serial.print(" (pin ");
+        Serial.print(cylinders[i]);
+        Serial.println(") has been removed.");
+        if (triggered) { // fix bug, lets invalidate all to reset!
+          for (int a = 0; a < numOfCylinders; a++) {
+            cylindersStates[a] = (digitalRead(cylinders[a]) * -1) + 1;
           }
         }
       }
+      triggered = false;
     }
-    // give the web browser time to receive the data
-    delay(50);  // change based off lag.
-    // close the connection:
-    client.stop();
+    cylindersStates[i] = state;
   }
+  for (int i = 0; i < numOfCylinders; i++) {
+    int state = cylindersStates[i];
+    if (state == HIGH) {
+      triggered = false;
+    }
+  }
+  if (triggered) {
+    soundPlay = false;
+    if (!triggercheck) {
+      triggercheck = true;
+      triggermil = millis() + 3000;
+    }
+    if (triggermil < millis()) {
+      checked_trigger = true;
+    }
+  } else {
+    triggercheck = false;
+    checked_trigger = false;
+  }
+  SetLightBarLights();
+  runWifiLoop();
+  delay(25);
+}
+
+void CheckPin(AsyncResponseStream *response, bool changed) {
+  String status = (changed) ? "triggered" : "not triggered";
+  response->print(status);
+}
+
+void GetMainMenu(AsyncResponseStream *response) {
+  //Serial.println("Polled.");
+  response->print("<!DOCTYPE HTML>");
+  response->print("<html>");
+  response->print("<head>");
+  response->print("<style>");
+  response->print("body { background-color: #111111; font-family:Roboto }");
+  response->print("h1 { color: #ffffff; }");
+  response->print("h3 { color: #999999; }");
+  response->print("</style>");
+  response->print("</head>");
+  response->print("<body {background-color: #111111;}>");
+  response->print("<img src='https://static.wixstatic.com/media/6e6fcf_230f10c631da4717a2d87b0e96cd93f9~mv2_d_8001_4178_s_4_2.png/v1/crop/x_2,y_943,w_7999,h_2240/fill/w_489,h_137,al_c,q_85,usm_0.66_1.00_0.01,enc_auto/OE8_Primrary2_White.png' alt='Wix.com'>");
+  response->print("<h1>Arduino to Escape Room Master</h1>");
+  response->print("<h1>By Ryan</h1>");
+  response->print("<h3>I'm working just fine.</h3>");
+  response->print("<h3>Mission O2 Tanks. /completed /sound</h3>");
+  response->print("</body>");
+  response->print("</html>");
 }
 
 void attemptWifiConnection() {
@@ -325,8 +219,7 @@ void attemptWifiConnection() {
   Serial.print("\n\n\nConnecting to ");
   Serial.println(ssid);
   WiFi.mode(WIFI_STA);
-  //esp_wifi_set_ps(WIFI_PS_NONE);
-  esp_sleep_pd_config(ESP_PD_DOMAIN_MAX,ESP_PD_OPTION_OFF);
+  WiFi.setSleep(WIFI_PS_NONE);
   WiFi.begin(ssid, password);
   bool blink = false;
   int timeout = millis() + 10000;
@@ -364,7 +257,7 @@ void attemptWifiConnection() {
 
 void runWifiLoop() {
   if (WiFi.status() == WL_CONNECTED) {
-    listenForWifiClients();
+    //listenForWifiClients();
   } else {
     attemptWifiConnection();
   }

@@ -236,8 +236,7 @@ void attemptWifiConnection() {
   Serial.print("\n\n\nConnecting to ");
   Serial.println(ssid);
   WiFi.mode(WIFI_STA);
-  //esp_wifi_set_ps(WIFI_PS_NONE);
-  esp_sleep_pd_config(ESP_PD_DOMAIN_MAX,ESP_PD_OPTION_OFF);
+  WiFi.setSleep(WIFI_PS_NONE);
   WiFi.begin(ssid, password);
   bool blink = false;
   int timeout = millis() + 10000;

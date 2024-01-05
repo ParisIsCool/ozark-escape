@@ -1,3 +1,5 @@
+#include <ESPAsyncWebSrv.h>
+
 // Load Wi-Fi library
 #include <Arduino.h>
 #include <WiFi.h>
@@ -25,8 +27,8 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8);    //optional
 IPAddress secondaryDNS(8, 8, 4, 4);  //optional
 
-// Set web server port number to 80
-WiFiServer server(80);
+// Set async web server port number to 80
+AsyncWebServer server(80);
 
 void setup() {
   Serial.begin(115200);
@@ -36,58 +38,67 @@ void setup() {
   pinMode(RELAY, OUTPUT);
   pinMode(RELAY2, OUTPUT);
   pinMode(LED, OUTPUT);
+  server.on("/2", HTTP_GET, [](AsyncWebServerRequest *request){
+    AsyncResponseStream *response = request->beginResponseStream("text/html");
+    digitalWrite(RELAY, HIGH);
+    response->print("Toggled 1 On");
+    response->addHeader("Access-Control-Allow-Origin","*");
+    request->send(response);
+    delay(1000);
+    digitalWrite(RELAY, LOW);
+  });
+
+  server.on("/1", HTTP_GET, [](AsyncWebServerRequest *request){
+    AsyncResponseStream *response = request->beginResponseStream("text/html");
+    digitalWrite(RELAY2, HIGH);
+    response->print("Toggled 2 On");
+    response->addHeader("Access-Control-Allow-Origin","*");
+    request->send(response);
+    delay(1000);
+    digitalWrite(RELAY2, LOW);
+  });
+
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    AsyncResponseStream *response = request->beginResponseStream("text/html");
+    GetMainMenu(response);
+    request->send(response);
+  });
+
+  server.onNotFound([](AsyncWebServerRequest *request){
+    AsyncResponseStream *response = request->beginResponseStream("text/html");
+    GetMainMenu(response);
+    request->send(response);
+  });
 }
 
 void loop() {
   runWifiLoop();
 }
 
-
-// Actual request handler
-void processRequest(WiFiClient& client, String requestStr) {
-  // Send back different response based on request string
-  if (requestStr.startsWith("GET /1")) {
-    digitalWrite(RELAY, HIGH);
-    Serial.println("Toggled 1 On");
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/plain");
-    client.println("toggled");
-    delay(1000);
-    digitalWrite(RELAY, LOW);
-  } else if (requestStr.startsWith("GET /2")) {
-    digitalWrite(RELAY2, HIGH);
-    Serial.println("Toggled 2 On");
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/plain");
-    client.println("toggled");
-    delay(1000);
-    digitalWrite(RELAY2, LOW);
-  } else {  // when ip is called with no request
-    Serial.println("Polled.");
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/html");
-    client.println();
-    client.println("<!DOCTYPE HTML>");
-    client.println("<html>");
-    client.println("<head>");
-    client.println("<style>");
-    client.println("body { background-color: #111111; font-family:Roboto }");
-    client.println("h1 { color: #ffffff; }");
-    client.println("h3 { color: #999999; }");
-    client.println("</style>");
-    client.println("</head>");
-    client.println("<body {background-color: #111111;}>");
-    client.println("<img src='https://static.wixstatic.com/media/6e6fcf_230f10c631da4717a2d87b0e96cd93f9~mv2_d_8001_4178_s_4_2.png/v1/crop/x_2,y_943,w_7999,h_2240/fill/w_489,h_137,al_c,q_85,usm_0.66_1.00_0.01,enc_auto/OE8_Primrary2_White.png' alt='Wix.com'>");
-    client.println("<h1>Arduino to Escape Room Master</h1>");
-    client.println("<h1>By Ryan</h1>");
-    client.println("<h3>I'm working just fine.</h3>");
-    client.println("<h3>4 Particle Reset Trigger.</h3>");
-    client.println("<h3>/1 resets.</h3>");
-    client.println("<h3>/2 force solves.</h3>");
-    client.println("</body>");
-    client.println("</html>");
-  }
+void GetMainMenu(AsyncResponseStream *response) {
+  //Serial.println("Polled.");
+  response->print("<!DOCTYPE HTML>");
+  response->print("<html>");
+  response->print("<head>");
+  response->print("<style>");
+  response->print("body { background-color: #111111; font-family:Roboto }");
+  response->print("h1 { color: #ffffff; }");
+  response->print("h3 { color: #999999; }");
+  response->print("</style>");
+  response->print("</head>");
+  response->print("<body {background-color: #111111;}>");
+  response->print("<img src='https://static.wixstatic.com/media/6e6fcf_230f10c631da4717a2d87b0e96cd93f9~mv2_d_8001_4178_s_4_2.png/v1/crop/x_2,y_943,w_7999,h_2240/fill/w_489,h_137,al_c,q_85,usm_0.66_1.00_0.01,enc_auto/OE8_Primrary2_White.png' alt='Wix.com'>");
+  response->print("<h1>Arduino to Escape Room Master</h1>");
+  response->print("<h1>By Ryan</h1>");
+  response->print("<h3>I'm working just fine.</h3>");
+  response->print("<h3>4 Particle Reset Trigger.</h3>");
+  response->print("<h3>/1 resets.</h3>");
+  response->print("<h3>/2 force solves.</h3>");
+  response->print("</body>");
+  response->print("</html>");
 }
+
+
 
 void attemptWifiConnection() {
     // Configures static IP address
@@ -100,8 +111,7 @@ void attemptWifiConnection() {
   Serial.print("\n\n\nConnecting to ");
   Serial.println(ssid);
   WiFi.mode(WIFI_STA);
-  //esp_wifi_set_ps(WIFI_PS_NONE);
-  esp_sleep_pd_config(ESP_PD_DOMAIN_MAX,ESP_PD_OPTION_OFF);
+  WiFi.setSleep(WIFI_PS_NONE);
   WiFi.begin(ssid, password);
   bool blink = false;
   int timeout = millis() + 10000;
@@ -137,51 +147,9 @@ void attemptWifiConnection() {
   }
 }
 
-// DO NOT TOUCH
-// If having trouble connecting, signal may be weak.
-void listenForWifiClients() {
-  // listen for incoming clients
-  WiFiClient client = server.available();
-  if (client) {
-    // Grab the first HTTP header (GET /status HTTP/1.1)
-    String requestStr;
-    boolean firstLine = true;
-    // an http request ends with a blank line
-    boolean currentLineIsBlank = true;
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        // if you've gotten to the end of the line (received a newline
-        // character) and the line is blank, the http request has ended,
-        // so you can send a reply
-        if (c == '\n' && currentLineIsBlank) {
-          processRequest(client, requestStr);
-          break;
-        }
-        if (c == '\n') {
-          // you're starting a new line
-          currentLineIsBlank = true;
-          firstLine = false;
-        } else if (c != '\r') {
-          // you've gotten a character on the current line
-          currentLineIsBlank = false;
-
-          if (firstLine) {
-            requestStr.concat(c);
-          }
-        }
-      }
-    }
-    // give the web browser time to receive the data
-    delay(100);  // change based off lag.
-    // close the connection:
-    client.stop();
-  }
-}
-
 void runWifiLoop() {
   if (WiFi.status() == WL_CONNECTED) {
-    listenForWifiClients();
+
   } else {
     attemptWifiConnection();
   }
