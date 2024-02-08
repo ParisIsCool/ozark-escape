@@ -19,7 +19,8 @@ uint32_t lastScroll2 = 0;
 uint32_t nextScroll2 = 0;
 uint32_t lastUpdateTime = 0;
 uint32_t ledUpdateIntervals[NUM_RANDOM];
-
+unsigned long fadeStartTime = 0;
+unsigned long fadeDuration = 1000; // Adjust the duration of the fade in milliseconds
 
 void setup() {
   Serial.begin(9600);
@@ -31,6 +32,34 @@ void setup() {
   // Initialize delay intervals for each LED
   for (int i = 0; i < NUM_LEDS; i++) {
     ledUpdateIntervals[i] = random(100, 1000);
+  }
+}
+
+CRGB getLedColor(int ledIndex) {
+  // Define the color for each LED index
+  switch (ledIndex) {
+    case 1: return CRGB::Red;
+    case 2: return CRGB::Yellow;
+    case 3: return CRGB::Green;
+    case 4: return CRGB::White;
+    case 5: return CRGB::Blue;
+    default: return CRGB::Black;
+  }
+}
+
+void fadeToColor(int ledIndex, CRGB targetColor) {
+  static const int fadeSteps = 50; // Adjust the number of steps for a smoother fade
+  CRGB currentColor = leds[ledIndex];
+  unsigned long currentTime = millis();
+  unsigned long elapsedTime = currentTime - fadeStartTime;
+
+  if (elapsedTime < fadeDuration) {
+    float blendFactor = float(elapsedTime) / float(fadeDuration);
+    CRGB blendedColor = blend(currentColor, targetColor, blendFactor);
+    leds[ledIndex] = blendedColor;
+    FastLED.show();
+  } else {
+    leds[ledIndex] = targetColor;
   }
 }
 
@@ -56,7 +85,8 @@ void loop() {
       leds[ScrollingLeds1[nextScroll1]] = CRGB::White; // Set LED to white
     }
 
-    if (lastScroll2 + 2000 < millis()) {
+    // OLD CODE
+    /*if (lastScroll2 + 2000 < millis()) {
       lastScroll2 = millis();
       for (int i = 0; i < NUM_SCROLL2; i++) {
         leds[ScrollingLeds2[i]] = CRGB::Black; // Set LED to off
@@ -66,8 +96,20 @@ void loop() {
         nextScroll2 = 0;
       }
       leds[ScrollingLeds2[nextScroll2]] = CRGB::White; // Set LED to white
+    }*/
+
+    if (lastScroll2 + 2000 < millis()) {
+      lastScroll2 = millis();
+      for (int i = 0; i < NUM_SCROLL2; i++) {
+        int currentLED = ScrollingLeds2[i];
+        fadeToColor(currentLED, CRGB::Black); // Fade to black
+      }
+      nextScroll2 = (nextScroll2 + 1) % NUM_SCROLL2;
+      int nextLED = ScrollingLeds2[nextScroll2];
+      fadeStartTime = millis();
+      fadeToColor(nextLED, getLedColor(nextLED)); // Fade to the respective color
     }
-    
+        
     for (int i = 0; i < NUM_RANDOM; i++) {
       if (ledUpdateIntervals[i] <= millis()) {
         // Reset the delay for this LED
